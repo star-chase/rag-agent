@@ -1,0 +1,12 @@
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# B008: FastAPI 依赖注入（Depends() 写在默认参数）是标准用法
+# E402: tests/conftest.py 需先设置环境变量再导入 app，属故意
+ignore = ["E501", "B008", "E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

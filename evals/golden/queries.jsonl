@@ -1,0 +1,24 @@
+{"id": "q01", "question": "公司年假有多少天，可以结转吗？", "terms": ["年假", "结转"], "relevant": ["leave-policy.md"], "answerable": true}
+{"id": "q02", "question": "病假需要什么证明？", "terms": ["病假", "医院证明"], "relevant": ["leave-policy.md"], "answerable": true}
+{"id": "q03", "question": "出差住宿标准和餐补是多少？", "terms": ["住宿标准", "餐补"], "relevant": ["expense-policy.md"], "answerable": true}
+{"id": "q04", "question": "报销流程走完多久打款？", "terms": ["报销", "打款"], "relevant": ["expense-policy.md"], "answerable": true}
+{"id": "q05", "question": "新人入职要完成哪些培训？", "terms": ["入职", "安全培训"], "relevant": ["onboarding.md"], "answerable": true}
+{"id": "q06", "question": "密码长度要求是什么，生产库怎么访问？", "terms": ["密码", "堡垒机"], "relevant": ["security-policy.md"], "answerable": true}
+{"id": "q07", "question": "加班后调休怎么算？", "terms": ["加班", "调休"], "relevant": ["overtime.md"], "answerable": true}
+{"id": "q08", "question": "远程办公的核心会议时间是什么时候？", "terms": ["远程办公", "核心会议"], "relevant": ["remote-work.md"], "answerable": true}
+{"id": "q09", "question": "绩效考核和奖金系数怎么挂钩？", "terms": ["绩效考核", "奖金"], "relevant": ["performance.md"], "answerable": true}
+{"id": "q10", "question": "自评和绩效面谈的时间要求？", "terms": ["自评", "面谈"], "relevant": ["performance.md"], "answerable": true}
+{"id": "q11", "question": "IT 工单多久响应？", "terms": ["工单", "响应时间"], "relevant": ["it-support.md"], "answerable": true}
+{"id": "q12", "question": "学习补贴和认证考试怎么报销？", "terms": ["学习补贴", "认证考试"], "relevant": ["training.md"], "answerable": true}
+{"id": "q13", "question": "出差申请和工作日志有什么要求？", "terms": ["出差申请", "工作日志"], "relevant": ["travel.md"], "answerable": true}
+{"id": "q14", "question": "每月几号发薪，工资条怎么发？", "terms": ["发薪", "工资条"], "relevant": ["salary.md"], "answerable": true}
+{"id": "q15", "question": "门禁卡补办和停车位怎么申请？", "terms": ["门禁卡", "停车位"], "relevant": ["faq.md"], "answerable": true}
+{"id": "q16", "question": "社保和公积金的基数是怎样的？", "terms": ["社保", "公积金"], "relevant": ["salary.md"], "answerable": true}
+{"id": "q17", "question": "内部培训多久一次？", "terms": ["内部培训", "学习补贴"], "relevant": ["training.md"], "answerable": true}
+{"id": "q18", "question": "出差报告和费用明细什么时候提交？", "terms": ["出差报告", "费用明细"], "relevant": ["travel.md"], "answerable": true}
+{"id": "q19", "question": "公司期权的行权价怎么确定？", "terms": ["期权", "行权价"], "relevant": [], "answerable": false}
+{"id": "q20", "question": "婚假和陪产假有多少天？", "terms": ["婚假", "陪产假"], "relevant": [], "answerable": false}
+{"id": "q21", "question": "公司有通勤班车吗？", "terms": ["通勤班车", "路线"], "relevant": [], "answerable": false}
+{"id": "q22", "question": "公司提供托育服务吗？", "terms": ["托育", "幼儿园"], "relevant": [], "answerable": false}
+{"id": "q23", "question": "办公室可以带宠物吗？", "terms": ["宠物", "宠物友好"], "relevant": [], "answerable": false}
+{"id": "q24", "question": "有租房补贴吗？", "terms": ["租房补贴", "宿舍"], "relevant": [], "answerable": false}
