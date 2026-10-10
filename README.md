@@ -1,5 +1,7 @@
 # RAG Agent — 智能知识库问答平台
 
+[![CI](https://github.com/star-chase/rag-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/star-chase/rag-agent/actions/workflows/ci.yml)
+
 
 面向「Agent 后端」方向校招的项目一：一个生产级 RAG（检索增强生成）问答后端。
 用户上传文档，系统完成 **解析 → 分块 → 向量化 → 混合检索 → 大模型生成（带引用）** 全流程，
