@@ -52,7 +52,7 @@ jobs:
       - name: Lint (ruff)
         run: |
           pip install ruff
-          ruff check app tests
+          ruff check app tests evals
 
       - name: Check demo frontend syntax
         run: node --check app/static/app.js

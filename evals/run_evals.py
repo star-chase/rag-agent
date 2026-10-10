@@ -32,7 +32,7 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -304,11 +304,11 @@ def summarize(name: str, results: list[QueryResult], top_k: int, channel: str) -
     relevant_sets = [set(item.relevant) for item in answerable]
     return Metrics(
         name=name,
-        recall_1=statistics.mean([recall_at(d, r, 1) for d, r in zip(docs, relevant_sets)]),
-        recall_3=statistics.mean([recall_at(d, r, 3) for d, r in zip(docs, relevant_sets)]),
-        recall_5=statistics.mean([recall_at(d, r, 5) for d, r in zip(docs, relevant_sets)]),
-        mrr_5=statistics.mean([reciprocal_rank(d[:5], r) for d, r in zip(docs, relevant_sets)]),
-        ndcg_5=statistics.mean([ndcg_at(d, r, 5) for d, r in zip(docs, relevant_sets)]),
+        recall_1=statistics.mean([recall_at(d, r, 1) for d, r in zip(docs, relevant_sets, strict=True)]),
+        recall_3=statistics.mean([recall_at(d, r, 3) for d, r in zip(docs, relevant_sets, strict=True)]),
+        recall_5=statistics.mean([recall_at(d, r, 5) for d, r in zip(docs, relevant_sets, strict=True)]),
+        mrr_5=statistics.mean([reciprocal_rank(d[:5], r) for d, r in zip(docs, relevant_sets, strict=True)]),
+        ndcg_5=statistics.mean([ndcg_at(d, r, 5) for d, r in zip(docs, relevant_sets, strict=True)]),
         p50_ms=statistics.median(latencies) if latencies else 0.0,
         p95_ms=sorted(latencies)[max(0, math.ceil(0.95 * len(latencies)) - 1)] if latencies else 0.0,
     )
@@ -339,14 +339,14 @@ def render_markdown(
     lines = [
         "# RAG Agent 检索质量评测报告",
         "",
-        f"- 运行时间：{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+        f"- 运行时间：{datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}",
         f"- 模式：{mode}（embedding_mode={settings.embedding_mode}, llm_mode={settings.llm_mode}, "
         f"rerank_mode={settings.rerank_mode}）",
         f"- 语料：{corpus_size} 篇文档 / 查询：{len(results)} 条"
         f"（可回答 {len(answerable)}、不可回答 {len(unanswerable)}）",
         f"- top_k：{top_k}",
         "",
-        "## 检索质量（文档级，{0} 条可回答问题）".format(len(answerable)),
+        f"## 检索质量（文档级，{len(answerable)} 条可回答问题）",
         "",
         "| 通道 | Recall@1 | Recall@3 | Recall@5 | MRR@5 | nDCG@5 | p50 (ms) | p95 (ms) |",
         "| --- | --- | --- | --- | --- | --- | --- | --- |",

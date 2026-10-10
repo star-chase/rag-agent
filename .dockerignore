@@ -1,0 +1,16 @@
+# 镜像里不需要、也不该有的东西
+.git
+.github
+.env
+.env.*
+!.env.example
+.deps/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+uploads/
+*.log
+agent.db
