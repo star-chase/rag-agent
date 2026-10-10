@@ -7,6 +7,8 @@
 
 接口保持简单，后续可替换为 bge-reranker 等交叉编码器模型。
 """
+from __future__ import annotations
+
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
