@@ -223,3 +223,34 @@ def test_stdio_subprocess_keeps_stdout_pure():
     finally:
         if process.poll() is None:
             process.kill()
+
+
+
+def test_stdout_is_taken_over_for_protocol():
+    """fd 级接管：print 不再进协议通道，协议流仍然干净。"""
+    import os
+    import sys as _sys
+
+    from app.mcp.server import take_over_stdout
+
+    saved_fd = os.dup(1)
+    saved_stdout, saved_stderr = _sys.stdout, _sys.stderr
+    read_fd, write_fd = os.pipe()
+    try:
+        os.dup2(write_fd, 1)
+        os.close(write_fd)
+        _sys.stdout = os.fdopen(os.dup(1), "w", buffering=1)
+
+        protocol_out = take_over_stdout()
+        print("这行是普通输出，应该走 stderr")  # noqa: T201
+        protocol_out.write('{"jsonrpc":"2.0","id":1}\n')
+        protocol_out.flush()
+
+        os.set_blocking(read_fd, False)
+        captured = os.read(read_fd, 4096).decode()
+        assert captured.strip() == '{"jsonrpc":"2.0","id":1}'
+    finally:
+        os.dup2(saved_fd, 1)
+        os.close(saved_fd)
+        os.close(read_fd)
+        _sys.stdout, _sys.stderr = saved_stdout, saved_stderr

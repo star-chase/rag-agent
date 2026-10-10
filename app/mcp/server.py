@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 import threading
 from typing import Any
@@ -34,6 +35,21 @@ INSTRUCTIONS = (
 
 def tools_payload(tools: list[Tool]) -> list[dict[str, Any]]:
     return [tool.to_wire() for tool in tools]
+
+
+def take_over_stdout() -> Any:
+    """把 fd 1 让给协议：协议写 dup 出来的原始 fd，其它标准输出全部改道 stderr。
+
+    为什么必须做到 fd 级（实测踩过两次）：
+    1. `print()` / loguru / uvicorn 之类在 Python 层写 `sys.stdout`，换 `sys.stdout` 能拦住；
+    2. 但 SQLAlchemy 的 `echo=True` 在 **engine 创建时**（import 期）就抓住了原始 stdout 对象，
+       之后它一直往那条老通道写 —— 只换 `sys.stdout` 拦不住，协议里就混进了 SQL 日志。
+    所以这里 dup 出协议专用流，再用 `os.dup2` 把 fd 1（真正的标准输出）指向 stderr。
+    """
+    protocol_out = os.fdopen(os.dup(sys.stdout.fileno()), "w", buffering=1, encoding="utf-8")
+    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    sys.stdout = sys.stderr  # 让 print / 新建的 StreamHandler 也走 stderr
+    return protocol_out
 
 
 async def handle_message(message: dict[str, Any], tools: list[Tool]) -> dict[str, Any] | None:
@@ -104,6 +120,7 @@ async def handle_message(message: dict[str, Any], tools: list[Tool]) -> dict[str
 
 async def serve(tools: list[Tool]) -> int:
     """读 stdin → 分发 → 写 stdout。所有响应串行写出，避免多路交错把协议写坏。"""
+    protocol_out = take_over_stdout()
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[str | None] = asyncio.Queue()
 
@@ -132,8 +149,8 @@ async def serve(tools: list[Tool]) -> int:
                 None, protocol.INTERNAL_ERROR, f"服务内部错误：{type(exc).__name__}: {exc}"
             )
         if response is not None:
-            sys.stdout.write(protocol.dumps(response) + "\n")
-            sys.stdout.flush()
+            protocol_out.write(protocol.dumps(response) + "\n")
+            protocol_out.flush()
 
 
 def main(argv: list[str] | None = None) -> int:
