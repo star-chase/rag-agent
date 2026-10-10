@@ -249,6 +249,57 @@ PYTHONPATH=.deps python3 -m pytest -v
 
 覆盖：分块器、密码/JWT、注册登录、知识库多租户隔离、文档摄入、缓存命中、SSE 流式。
 
+## 🔌 MCP Server（把检索能力暴露成标准工具）
+
+MCP（[Model Context Protocol](https://modelcontextprotocol.io/)）让任何 MCP 客户端（Claude Desktop、Cursor、Agent 平台）
+直接把本服务当成工具集来调。这里实现 tools 子集，传输用 stdio：
+
+```bash
+# 自检：打印工具 schema 后退出（不进入协议会话，CI 里跑的就是它）
+python -m app.mcp.server --list-tools
+
+# 作为 MCP server 跑，客户端通过 stdio 连接
+MCP_USER_EMAIL=you@example.com MCP_DEFAULT_KB_ID=1 python -m app.mcp.server
+```
+
+| 工具 | 说明 |
+| --- | --- |
+| `search_knowledge` | 混合检索（向量 + 关键词 + RRF + 精排），返回片段、来源文件名与分数 |
+| `ask_knowledge` | 带 `[1][2]` 引用的回答；知识库没有依据时明确拒答 |
+| `list_knowledge_bases` | 当前身份可见的知识库与文档数 |
+| `upload_document` | 写工具，**默认不挂载**，设置 `MCP_ALLOW_WRITE=1` 才出现 |
+
+环境变量：`MCP_USER_EMAIL`（必填，检索身份，所有查询强制按该用户过滤）、
+`MCP_DEFAULT_KB_ID`（可选，未传 `kb_id` 时用它）、`MCP_ALLOW_WRITE=1`（可选，开启写工具）。
+
+实现说明（面试要点）：
+
+- stdio 传输是**换行分隔的 JSON-RPC 2.0**（不是 LSP 的 `Content-Length` 分帧）；**stdout 只写协议消息**，日志走 stderr；
+- 约定：工具执行失败返回正常 result + `isError: true`（模型能看到失败原因并自己决定下一步），
+  只有编解码失败 / 方法不存在 / 参数非法才走 JSON-RPC error（`-32700 / -32601 / -32602`）；
+- 协议层是纯函数（`app/mcp/server.py::handle_message`），所以协议测试不需要数据库；
+  另外用真子进程断言 stdout 每一行都是合法 JSON（防日志污染协议）；
+- 不引入官方 `mcp` SDK：协议层两百行，手写换来零新依赖 + 能离线测协议本身。
+
+客户端配置示例（Claude Desktop / Cursor 的 `mcpServers` 段）：
+
+```json
+{
+  "mcpServers": {
+    "rag-agent": {
+      "command": "python",
+      "args": ["-m", "app.mcp.server"],
+      "cwd": "/path/to/rag-agent",
+      "env": { "MCP_USER_EMAIL": "you@example.com", "MCP_DEFAULT_KB_ID": "1" }
+    }
+  }
+}
+```
+
+已知限制：只实现 tools（没有 resources / prompts / sampling）；没有 OAuth，身份来自环境变量；
+知识库有内容但没有相关结果时，混合检索**没有相关性阈值**，仍会返回候选片段（评测里的发现），
+拒答目前依赖提示词约束。
+
 ## 📊 评测（evals）
 
 检索质量不靠"感觉还行"，靠固定的语料 + 查询集出一张可对比的表：
@@ -287,6 +338,7 @@ rag-agent/
 │   ├── db/                     # session / base / models（user/kb/document/chunk/conversation）+ seed_demo
 │   ├── schemas/                # Pydantic 请求/响应模型
 │   ├── services/               # 业务层：auth / kb / ingest / embedding / llm / rag / chat
+│   ├── mcp/                    # MCP server：JSON-RPC 协议层 + 工具表 + stdio 服务
 │   └── workers/                # Celery 应用与任务（文档摄入）
 ├── tests/                      # pytest（单元 + API 集成）
 ├── evals/                      # 检索质量评测（golden 语料 + 查询集 + 报告）

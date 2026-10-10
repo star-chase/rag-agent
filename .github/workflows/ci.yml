@@ -60,6 +60,9 @@ jobs:
       - name: Run tests
         run: python -m pytest -v
 
+      - name: Check MCP server（工具 schema 自检）
+        run: python -m app.mcp.server --list-tools > /dev/null
+
       - name: Run evals（检索质量评测）
         run: python -m evals.run_evals --check --report evals/report.md
 
