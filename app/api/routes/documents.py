@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.deps import get_owned_document, get_owned_knowledge_base
 from app.core.storage import get_storage, guess_file_type
-from app.db.models import Document, KnowledgeBase
+from app.db.models import Chunk, Document, KnowledgeBase
 from app.db.session import get_db
-from app.schemas.document import DocumentOut, DocumentStatusOut
+from app.schemas.document import ChunkOut, DocumentOut, DocumentStatusOut
 from app.services.ingest_service import make_storage_key, process_document
 from app.workers.ingest_tasks import process_document_task
 
@@ -84,6 +84,16 @@ async def list_documents(
 @router.get("/documents/{doc_id}", response_model=DocumentOut)
 async def get_document(doc: Document = Depends(get_owned_document)) -> Document:
     return doc
+
+
+@router.get("/documents/{doc_id}/chunks", response_model=list[ChunkOut])
+async def list_document_chunks(
+    doc: Document = Depends(get_owned_document),
+    db: AsyncSession = Depends(get_db),
+) -> list[Chunk]:
+    """查看文档解析出的分块内容（演示台「查看内容」/排障用）。"""
+    rows = await db.scalars(select(Chunk).where(Chunk.document_id == doc.id).order_by(Chunk.seq))
+    return list(rows)
 
 
 @router.get("/documents/{doc_id}/status", response_model=DocumentStatusOut)

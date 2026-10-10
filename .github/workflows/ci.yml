@@ -54,6 +54,9 @@ jobs:
           pip install ruff
           ruff check app tests
 
+      - name: Check demo frontend syntax
+        run: node --check app/static/app.js
+
       - name: Run tests
         run: python -m pytest -v
 

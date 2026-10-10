@@ -26,6 +26,7 @@
 | 异步任务 | Celery（Redis broker）处理文档摄入，失败自动退避重试（幂等：重复处理会先清旧块） |
 | 健康检查 | /health 汇总 DB / Redis / 组件状态 |
 | 部署 | docker-compose 一键启动（postgres+pgvector / redis / minio / api / worker） |
+| 演示前端 | 同源托管在 `/`（`/demo/` 亦可）：登录 / 知识库 / 文档上传与状态 / **查看分块内容** / **SSE 流式问答 + 引用卡片** / 健康检查；零依赖零构建 |
 
 ## 🏗️ 架构
 
@@ -143,6 +144,34 @@ curl -N -X POST localhost:8000/api/v1/conversations/$CONV_ID/ask-stream \
   -d '{"question":"几点上班？"}'   # SSE 流式
 ```
 
+### 演示前端（`/`，也可用 `/demo/`）
+
+浏览器里的完整演示台：登录 → 建知识库 → 上传文档（看摄取状态）→ 点「查看」看分块内容
+→ 流式问答（引用卡片可点、缓存命中标记）→ 健康检查。
+前端是零依赖的原生 HTML/CSS/JS，由后端同源托管，不吃 CORS、不需要 node/npm。
+
+```bash
+# 0) 起数据库（本机 Redis 已就绪则跳过）
+docker compose up -d postgres
+#    注意 .env 的 DATABASE_URL 要与 compose 一致：postgresql+asyncpg://rag:rag@127.0.0.1:5432/rag_agent
+
+# 1) 建表 + 灌演示数据（幂等：demo 用户 + 12 篇制度语料，可重复执行）
+PYTHONPATH=.deps python3 -m app.db.init_db
+PYTHONPATH=.deps python3 -m app.db.seed_demo        # 打印演示账号与可试问题
+
+# 2) 启动 API
+PYTHONPATH=.deps python3 -m uvicorn app.main:app --port 8000
+
+# 3) 打开演示台（演示账号 demo@example.com / demo12345）
+open http://127.0.0.1:8000/          # 根路径就是演示台；/demo/ 同样可访问
+#    接口文档仍在 http://127.0.0.1:8000/docs
+```
+
+Docker 方式下镜像里已包含 `app/static/`，直接访问 `http://localhost:8000/` 即可。
+静态资源挂在所有 API 路由之后，因此 `/docs`、`/api/v1/*` 不会被抢走。
+演示页用的是 `.env` 里的模型配置：`LLM_MODE=fake / EMBEDDING_MODE=fake` 时不需任何 API key
+（回答来自模板、向量无真实语义），换成真实 key 即可体现模型与检索质量。
+
 ## 📚 API 一览（前缀 /api/v1）
 
 | 方法 | 路径 | 说明 |
@@ -154,6 +183,7 @@ curl -N -X POST localhost:8000/api/v1/conversations/$CONV_ID/ask-stream \
 | GET/POST | /knowledge-bases/{id}/documents | 文档列表 / 上传 |
 | GET/DELETE | /documents/{id} | 文档详情 / 删除 |
 | GET | /documents/{id}/status | 处理状态 |
+| GET | /documents/{id}/chunks | 分块内容（演示台「查看」按钮） |
 | POST | /conversations | 创建会话 |
 | GET | /conversations | 会话列表 |
 | GET | /conversations/{id}/messages | 消息历史 |
@@ -247,11 +277,12 @@ TEST_DB_PORT=5432 TEST_DB_PASSWORD=rag PYTHONPATH=.deps python3 -m evals.run_eva
 ```text
 rag-agent/
 ├── app/
-│   ├── main.py                 # FastAPI 入口（路由注册 / CORS / lifespan）
+│   ├── main.py                 # FastAPI 入口（路由注册 / CORS / lifespan / /demo 静态托管）
+│   ├── static/                 # 演示前端（index.html + app.js + styles.css，零依赖）
 │   ├── config.py               # pydantic-settings 配置（.env）
 │   ├── api/routes/             # 路由层：auth / knowledge_bases / documents / conversations / health
 │   ├── core/                   # 公共能力：security(JWT/bcrypt) / deps(依赖) / redis / storage
-│   ├── db/                     # session / base / models（user/kb/document/chunk/conversation）
+│   ├── db/                     # session / base / models（user/kb/document/chunk/conversation）+ seed_demo
 │   ├── schemas/                # Pydantic 请求/响应模型
 │   ├── services/               # 业务层：auth / kb / ingest / embedding / llm / rag / chat
 │   └── workers/                # Celery 应用与任务（文档摄入）
@@ -268,7 +299,7 @@ rag-agent/
 - [ ] 文档增量更新与自动重新向量化（webhook / 定时任务）
 - [ ] 多文档混合引用、追问改写（query rewriting）
 - [ ] Prometheus + Grafana 指标面板（检索延迟、token 消耗、缓存命中率）
-- [ ] 前端演示界面（聊天 + 引用卡片 + 知识库管理）
+- [x] 前端演示界面（聊天 + 引用卡片 + 知识库管理，见 `/`）
 
 ## 📄 License
 

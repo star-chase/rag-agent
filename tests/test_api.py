@@ -149,3 +149,41 @@ async def test_stream_ask(client, auth_headers):
                 text += line
         assert '"type": "sources"' in text
         assert '"type": "done"' in text
+
+
+async def test_document_chunks_view(client, auth_headers):
+    """演示台「查看分块内容」：能读到解析后的分块，且受多租户隔离保护。"""
+    resp = await client.post("/api/v1/knowledge-bases", json={"name": "分块库"}, headers=auth_headers)
+    kb_id = resp.json()["id"]
+
+    body = "第一段：年假五天起。\n\n第二段：加班可调休。\n\n第三段：报销七个工作日到账。"
+    resp = await client.post(
+        f"/api/v1/knowledge-bases/{kb_id}/documents",
+        headers=auth_headers,
+        files={"file": ("chunk-demo.txt", body.encode(), "text/plain")},
+    )
+    assert resp.status_code == 201
+    doc_id = resp.json()["id"]
+
+    resp = await client.get(f"/api/v1/documents/{doc_id}/chunks", headers=auth_headers)
+    assert resp.status_code == 200
+    chunks = resp.json()
+    assert chunks, "应能读到分块内容"
+    assert [c["seq"] for c in chunks] == sorted(c["seq"] for c in chunks)
+    assert "年假" in "".join(c["content"] for c in chunks)
+
+    # 未登录 401
+    assert (await client.get(f"/api/v1/documents/{doc_id}/chunks")).status_code == 401
+
+    # 他人文档 404（不泄露存在性）
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "c@test.com", "password": "password123", "name": "Carol"},
+    )
+    resp = await client.post(
+        "/api/v1/auth/login", data={"username": "c@test.com", "password": "password123"}
+    )
+    carol_headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    assert (
+        await client.get(f"/api/v1/documents/{doc_id}/chunks", headers=carol_headers)
+    ).status_code == 404

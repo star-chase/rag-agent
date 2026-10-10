@@ -24,3 +24,13 @@ class DocumentStatusOut(BaseModel):
     status: str
     error_message: str | None
     chunk_count: int
+
+
+class ChunkOut(BaseModel):
+    """文档分块（供演示台查看解析结果，不含向量）。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    seq: int
+    content: str

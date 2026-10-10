@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Agent · 演示台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">RAG</span>
+      <div>
+        <h1>智能知识库问答 · 演示台</h1>
+        <p class="sub">上传 → 分块向量化 → 混合检索（向量 + 关键词 + RRF）→ 带引用回答</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="health-pill" class="pill pill-muted" title="后端 /health">检测中…</span>
+      <span id="user-chip" class="chip hidden"></span>
+      <button id="logout-btn" class="btn btn-ghost hidden" type="button">退出</button>
+    </div>
+  </header>
+
+  <section id="auth-view" class="auth-view">
+    <div class="card auth-card">
+      <div class="tabs">
+        <button class="tab active" data-tab="login" type="button">登录</button>
+        <button class="tab" data-tab="register" type="button">注册</button>
+      </div>
+      <form id="login-form" class="form">
+        <label>邮箱
+          <input name="email" type="email" required autocomplete="username" placeholder="demo@example.com">
+        </label>
+        <label>密码
+          <input name="password" type="password" required autocomplete="current-password" placeholder="demo12345">
+        </label>
+        <button class="btn btn-primary" type="submit">登录</button>
+      </form>
+      <form id="register-form" class="form hidden">
+        <label>邮箱
+          <input name="email" type="email" required autocomplete="username" placeholder="you@example.com">
+        </label>
+        <label>姓名
+          <input name="name" required maxlength="64" autocomplete="name" placeholder="张三">
+        </label>
+        <label>密码（8-64 位）
+          <input name="password" type="password" required minlength="8" maxlength="64" autocomplete="new-password">
+        </label>
+        <button class="btn btn-primary" type="submit">注册并登录</button>
+      </form>
+      <p class="hint">演示账号：<code>demo@example.com / demo12345</code>（先执行 <code>python3 -m app.db.seed_demo</code>）</p>
+    </div>
+  </section>
+
+  <main id="main-view" class="layout hidden">
+    <aside class="panel">
+      <div class="panel-head">
+        <h2>知识库</h2>
+        <button id="new-kb-btn" class="btn btn-mini" type="button">+ 新建</button>
+      </div>
+      <ul id="kb-list" class="list"></ul>
+      <div id="kb-empty" class="empty">还没有知识库，点「新建」开始</div>
+    </aside>
+
+    <aside class="panel">
+      <div class="panel-head">
+        <h2 id="docs-title">文档</h2>
+        <label class="btn btn-mini" for="file-input">+ 上传</label>
+        <input id="file-input" type="file" accept=".txt,.md,.pdf" multiple class="visually-hidden">
+      </div>
+      <p class="hint">支持 txt / md / pdf，单文件 ≤10MB</p>
+      <ul id="doc-list" class="list"></ul>
+      <div id="doc-empty" class="empty">选择知识库后可上传文档</div>
+    </aside>
+
+    <section class="panel chat">
+      <div class="panel-head">
+        <h2>问答</h2>
+        <span id="conv-chip" class="chip hidden"></span>
+        <button id="new-conv-btn" class="btn btn-mini" type="button">新对话</button>
+      </div>
+      <div id="messages" class="messages"></div>
+      <div id="suggestions" class="suggestions"></div>
+      <form id="ask-form" class="composer">
+        <textarea id="question" rows="2" placeholder="例如：公司年假有多少天，可以结转吗？（Enter 发送，Shift+Enter 换行）"></textarea>
+        <button id="send-btn" class="btn btn-primary" type="submit">发送</button>
+      </form>
+    </section>
+  </main>
+
+  <div id="modal" class="modal-backdrop hidden">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3 id="modal-title"></h3>
+        <button id="modal-close" class="btn btn-icon" type="button" title="关闭">×</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+      <div id="modal-actions" class="modal-actions"></div>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+</div>
+<script src="app.js" defer></script>
+</body>
+</html>
