@@ -51,8 +51,14 @@ def chunk_text(text: str, chunk_size: int | None = None, overlap: int | None = N
     - 先按空行切段落，尽量在段落边界合并，避免切断语义；
     - 超长段落按 chunk_size 硬切，硬切处保留 overlap 字符衔接上下文。
     """
-    chunk_size = chunk_size or settings.chunk_size
-    overlap = overlap or settings.chunk_overlap
+    if chunk_size is None:
+        chunk_size = settings.chunk_size
+    if overlap is None:
+        overlap = settings.chunk_overlap
+    if chunk_size <= 0:
+        raise ValueError("chunk_size 必须为正数")
+    if not 0 <= overlap < chunk_size:
+        raise ValueError(f"chunk_overlap 必须满足 0 <= overlap < chunk_size，当前 overlap={overlap} chunk_size={chunk_size}")
 
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
@@ -126,8 +132,12 @@ async def process_document(doc_id: int) -> None:
             doc.status = DOC_STATUS_READY
             doc.chunk_count = len(chunks)
             doc.error_message = None
+            kb_id = doc.knowledge_base_id
             await db.commit()
             logger.info("document {} ready, {} chunks", doc.id, len(chunks))
+            from app.services.chat_service import invalidate_kb_cache
+
+            await invalidate_kb_cache(kb_id)
         except Exception as exc:  # noqa: BLE001
             doc.status = DOC_STATUS_FAILED
             doc.error_message = str(exc)[:1000]

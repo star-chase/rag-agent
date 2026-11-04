@@ -4,8 +4,8 @@ import os
 # 必须在导入 app 之前设置
 os.environ["TESTING"] = "1"
 TEST_DB_HOST = os.environ.get("TEST_DB_HOST", "127.0.0.1")
-TEST_DB_PORT = os.environ.get("TEST_DB_PORT", "5433")
-TEST_DB_PASSWORD = os.environ.get("TEST_DB_PASSWORD", "")
+TEST_DB_PORT = os.environ.get("TEST_DB_PORT", "5432")
+TEST_DB_PASSWORD = os.environ.get("TEST_DB_PASSWORD", "rag")
 TEST_DB_USER = os.environ.get("TEST_DB_USER", "rag")
 os.environ["DATABASE_URL"] = (
     f"postgresql+asyncpg://{TEST_DB_USER}:{TEST_DB_PASSWORD}@{TEST_DB_HOST}:{TEST_DB_PORT}/rag_agent_test"
@@ -51,6 +51,7 @@ async def setup_db():
         from sqlalchemy import text
 
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_jieba"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield

@@ -1,4 +1,8 @@
-"""Embedding 服务：OpenAI 兼容接口，支持批量与分批。"""
+"""Embedding 服务。
+
+OpenAI 兼容接口按批发送字符串。豆包多模态接口一次只接受一段文本，
+请求体是 `{type, text}`，并用 `dimensions` 指定输出宽度。
+"""
 import asyncio
 
 import httpx
@@ -13,14 +17,65 @@ def _headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {settings.embedding_api_key}", "Content-Type": "application/json"}
 
 
-async def _embed_batch(texts: list[str]) -> list[list[float]]:
-    payload = {"model": settings.embedding_model, "input": texts}
-    async with httpx.AsyncClient(timeout=_TIMEOUT, trust_env=False) as client:
-        resp = await client.post(f"{settings.embedding_base_url}/embeddings", json=payload, headers=_headers())
+def embedding_endpoint() -> str:
+    base = settings.embedding_base_url.rstrip("/")
+    if base.endswith("/embeddings/multimodal") or base.endswith("/embeddings"):
+        return base
+    return f"{base}/embeddings"
+
+
+def uses_multimodal() -> bool:
+    return embedding_endpoint().endswith("/embeddings/multimodal")
+
+
+def _as_vector(raw: object) -> list[float]:
+    if isinstance(raw, list) and raw and isinstance(raw[0], list):
+        raw = raw[0]
+    if not isinstance(raw, list):
+        raise ValueError("embedding 字段不是数组")
+    return [float(value) for value in raw]
+
+
+def parse_embedding_batch(body: dict) -> list[list[float]]:
+    """兼容 OpenAI 的 data 数组，以及豆包多模态的 data 对象。"""
+    data = body["data"]
+    if isinstance(data, dict):
+        return [_as_vector(data["embedding"])]
+    ranked = sorted(data, key=lambda item: item.get("index", 0))
+    return [_as_vector(item["embedding"]) for item in ranked]
+
+
+def _check_dim(vectors: list[list[float]]) -> list[list[float]]:
+    expected = settings.embedding_dim
+    for vector in vectors:
+        if len(vector) != expected:
+            raise ValueError(f"模型返回 {len(vector)} 维，配置 EMBEDDING_DIM={expected}")
+    return vectors
+
+
+async def _post_embeddings(payload: dict) -> list[list[float]]:
+    # 直连方舟会超时，跟随 HTTPS_PROXY。
+    async with httpx.AsyncClient(timeout=_TIMEOUT, trust_env=True) as client:
+        resp = await client.post(embedding_endpoint(), json=payload, headers=_headers())
         resp.raise_for_status()
-        data = resp.json()
-        ranked = sorted(data["data"], key=lambda item: item["index"])
-        return [item["embedding"] for item in ranked]
+        return _check_dim(parse_embedding_batch(resp.json()))
+
+
+async def _embed_batch(texts: list[str]) -> list[list[float]]:
+    if uses_multimodal():
+        vectors: list[list[float]] = []
+        for index, text in enumerate(texts):
+            payload = {
+                "model": settings.embedding_model,
+                "input": [{"type": "text", "text": text}],
+                "dimensions": settings.embedding_dim,
+                "encoding_format": "float",
+            }
+            vectors.extend(await _post_embeddings(payload))
+            if index + 1 < len(texts):
+                await asyncio.sleep(0.05)
+        return vectors
+    return await _post_embeddings({"model": settings.embedding_model, "input": texts})
 
 
 def _fake_embedding(text: str) -> list[float]:

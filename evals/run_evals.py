@@ -11,7 +11,8 @@
 
 离线模式（EMBEDDING_MODE=fake、LLM_MODE=fake）用于 CI 回归：向量是确定性伪向量、没有语义，
 所以离线模式用查询自带的 `terms` 当检索词，指标只反映**管道行为**；
-要看真实语义质量，配好 EMBEDDING_API_KEY 后用 `EMBEDDING_MODE=real` 跑同一套评测。
+要看真实语义质量，在 `.env` 里把 `EMBEDDING_MODE` 改成 `real` 并填上 `EMBEDDING_API_KEY`。
+进程环境里没有这个变量、`.env` 里也没有时，才默认 `fake`，方便 CI。
 
 用法：
     python -m evals.run_evals                          # 跑全部，打印摘要
@@ -39,11 +40,32 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+
+def _dotenv_assigns(path: Path) -> set[str]:
+    """`.env` 里赋值过的键。只看键名，不把值读进进程环境。"""
+    if not path.is_file():
+        return set()
+    keys: set[str] = set()
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key.startswith("export "):
+            key = key.removeprefix("export ").strip()
+        if key:
+            keys.add(key)
+    return keys
+
+
 # 环境必须在 import app 之前设置（和 tests/conftest.py 同一套约束）
 os.environ["DEBUG"] = "false"  # 评测报告要干净：关掉 SQL echo
 os.environ.setdefault("TESTING", "1")
-os.environ.setdefault("EMBEDDING_MODE", "fake")
-os.environ.setdefault("LLM_MODE", "fake")
+# 进程环境和 .env 都没写模式时才用 fake。写进 .env 的 real 不会被这里盖掉。
+_dotenv_keys = _dotenv_assigns(ROOT / ".env")
+for _mode_key in ("EMBEDDING_MODE", "LLM_MODE"):
+    if _mode_key not in os.environ and _mode_key not in _dotenv_keys:
+        os.environ[_mode_key] = "fake"
 os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "true")
 os.environ.setdefault("STORAGE_BACKEND", "local")
 os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:6379/0")
@@ -52,9 +74,9 @@ os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://{user}:{password}@{host}:{port}/rag_agent_test".format(
         user=os.environ.get("TEST_DB_USER", "rag"),
-        password=os.environ.get("TEST_DB_PASSWORD", ""),
+        password=os.environ.get("TEST_DB_PASSWORD", "rag"),
         host=os.environ.get("TEST_DB_HOST", "127.0.0.1"),
-        port=os.environ.get("TEST_DB_PORT", "5433"),
+        port=os.environ.get("TEST_DB_PORT", "5432"),
     ),
 )
 
@@ -363,7 +385,7 @@ def render_markdown(
         "| 指标 | 数值 | 说明 |",
         "| --- | --- | --- |",
         f"| 关键词通道零命中率（不可回答） | {keyword_zero:.3f} | 没有召回就没有可引用的内容，是拒答的前置条件 |",
-        f"| 混合通道零命中率（不可回答） | {hybrid_zero:.3f} | 当前实现没有相关性阈值，混合通道几乎总会返回候选 |",
+        f"| 混合通道零命中率（不可回答） | {hybrid_zero:.3f} | 真实向量下，余弦相似度低于 RETRIEVAL_MIN_SIMILARITY 的候选不会返回 |",
         f"| 引用格式覆盖率（可回答） | {citation_rate:.3f} | 回答里是否带 [1] 引用标注 |",
         "",
         "## 逐条明细",
@@ -410,7 +432,11 @@ async def main_async(args: argparse.Namespace) -> int:
     await ensure_test_db()
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_jieba"))
         await conn.run_sync(Base.metadata.create_all)
+        from app.db.init_db import ensure_embedding_column
+
+        await ensure_embedding_column(conn)
     kb_id, filename_to_doc, user = await seed_corpus(corpus)
     doc_id_to_filename = {doc_id: name for name, doc_id in filename_to_doc.items()}
     try:

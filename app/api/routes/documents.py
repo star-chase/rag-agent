@@ -9,6 +9,7 @@ from app.core.storage import get_storage, guess_file_type
 from app.db.models import Chunk, Document, KnowledgeBase
 from app.db.session import get_db
 from app.schemas.document import ChunkOut, DocumentOut, DocumentStatusOut
+from app.services.chat_service import invalidate_kb_cache
 from app.services.ingest_service import make_storage_key, process_document
 from app.workers.ingest_tasks import process_document_task
 
@@ -112,6 +113,7 @@ async def delete_document(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """删除文档：先删对象存储文件，再删数据库记录（级联删除 chunks）。"""
+    kb_id = doc.knowledge_base_id
     storage = get_storage()
     try:
         await storage.delete(doc.storage_key)
@@ -119,3 +121,4 @@ async def delete_document(
         pass
     await db.delete(doc)
     await db.flush()
+    await invalidate_kb_cache(kb_id)

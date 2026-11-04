@@ -24,10 +24,10 @@
 | 智能问答 | 基于引用的回答（[1][2] 标注），引用溯源，无答案时拒答不编造 |
 | 流式输出 | SSE 流式问答（sources → delta* → done 事件流） |
 | 热点缓存 | 相同问题 1 小时缓存（Redis），命中直接返回 |
-| 限流 | 滑动窗口限流（Redis INCR + EXPIRE，每用户每分钟 N 次） |
+| 限流 | 滑动窗口限流（Redis 有序集合 + Lua，每用户最近 60 秒 N 次） |
 | 异步任务 | Celery（Redis broker）处理文档摄入，失败自动退避重试（幂等：重复处理会先清旧块） |
 | 健康检查 | /health 汇总 DB / Redis / 组件状态 |
-| 部署 | docker-compose 一键启动（postgres+pgvector / redis / minio / api / worker） |
+| 部署 | docker-compose 一键启动（自建 Postgres 镜像：pgvector + pg_jieba / redis / minio / api / worker） |
 | 演示前端 | 同源托管在 `/`（`/demo/` 亦可）：登录 / 知识库 / 文档上传与状态 / **查看分块内容** / **SSE 流式问答 + 引用卡片** / 健康检查；零依赖零构建 |
 
 ## 🏗️ 架构
@@ -75,7 +75,8 @@
 # 1. 准备环境变量
 cp .env.example .env
 # 编辑 .env：
-#   - 填入真实 LLM_API_KEY / EMBEDDING_API_KEY（OpenAI 兼容均可，如 DeepSeek/通义）
+#   - 填入 EMBEDDING_API_KEY。当前嵌入是豆包 doubao-embedding-vision-251215，1024 维
+#   - 对话模型可继续用 LLM_MODE=fake，或填入 LLM_API_KEY（OpenAI 兼容，如 DeepSeek/通义）
 #   - 修改 JWT_SECRET 为随机长字符串
 #   - 确保 CELERY_TASK_ALWAYS_EAGER=false（生产走 Celery worker）
 
@@ -214,7 +215,7 @@ Docker 方式下镜像里已包含 `app/static/`，直接访问 `http://localhos
 ```text
          ┌─ 向量检索（pgvector 余弦距离，HNSW 索引）─ 取 top_k×2
 问题 ────┤
-         └─ 关键词检索（ILIKE 命中查询词）────────── 取 top_k×2
+         └─ 关键词检索（pg_jieba / jiebacfg + ts_rank）─ 取 top_k×2
                     │
                     ▼
         RRF 融合：score = Σ 1/(k + rank)，取最终 top_k
@@ -231,14 +232,14 @@ Docker 方式下镜像里已包含 `app/static/`，直接访问 `http://localhos
 1. **RRF 融合初筛**：向量 top_k×2 + 关键词 top_k×2 → 取候选 top_k×2（保证召回）；
 2. **rerank 精排**：
    - `rrf`（默认）：直接按融合分数排序，零成本；
-   - `llm`：让 LLM 对"问题 + 片段"逐条打 0-10 相关性分再排序（更准、耗 token）；
-   - 接口预留 `RerankScorer` 回调，可无缝替换为 bge-reranker 等交叉编码器模型。
+   - `llm`：一次请求让 LLM 给全部候选打 0-10 分（JSON 数组）再排序；解析失败则保留 RRF 顺序；
+   - 接口预留批量打分回调，可替换为 bge-reranker 等交叉编码器模型。
 
 ### 引用溯源与防幻觉
 
 - 系统提示强制：**仅依据片段回答，无答案时明确拒答，不编造**；
-- 回答中用 [1][2] 标注引用，响应携带 sources 元数据（文档名、片段、相似度）；
-- 可扩展：置信度阈值（检索分数过低直接拒答）、rerank 模型、RAG 评测集（ragas）。
+- 真实向量模式下，余弦相似度低于 `RETRIEVAL_MIN_SIMILARITY`（默认 0.35）的候选在调用模型前丢弃；一个都不剩则直接拒答；
+- 回答中用 [1][2] 标注引用，响应携带 sources 元数据（文档名、片段、分数）；
 
 ## 🧪 测试
 

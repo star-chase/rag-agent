@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    build:
+      context: ./docker/postgres
+    image: rag-agent-postgres:pg16
     environment:
       POSTGRES_USER: rag
       POSTGRES_PASSWORD: rag
