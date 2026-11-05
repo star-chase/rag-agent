@@ -297,9 +297,9 @@ MCP_USER_EMAIL=you@example.com MCP_DEFAULT_KB_ID=1 python -m app.mcp.server
 }
 ```
 
-已知限制：只实现 tools（没有 resources / prompts / sampling）；没有 OAuth，身份来自环境变量；
-知识库有内容但没有相关结果时，混合检索**没有相关性阈值**，仍会返回候选片段（评测里的发现），
-拒答目前依赖提示词约束。
+已知限制：只实现 tools（没有 resources / prompts / sampling）；没有 OAuth，身份来自环境变量。
+真实向量下，余弦相似度低于 `RETRIEVAL_MIN_SIMILARITY` 的候选不会返回。fake 模式关闭这个阈值，
+混合检索仍可能返回不相关片段，这时拒答靠提示词。
 
 ## 📊 评测（evals）
 
@@ -314,17 +314,17 @@ docker compose up -d postgres
 TEST_DB_PORT=5432 TEST_DB_PASSWORD=rag PYTHONPATH=.deps python3 -m evals.run_evals --check --report evals/report.md
 ```
 
-本机离线实测（fake embedding，向量无语义，只反映管道行为）：
+下面是 2026-11-05 CI 的离线结果（fake embedding，关键词用 pg_jieba）。向量没有语义，数字只反映管道行为：
 
 | 通道 | Recall@1 | Recall@3 | Recall@5 | MRR@5 | nDCG@5 | p50 (ms) | p95 (ms) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 仅关键词通道 | 0.889 | 1.000 | 1.000 | 0.935 | 0.952 | 1.8 | 2.6 |
-| 混合检索 | 0.778 | 0.778 | 0.778 | 0.778 | 0.778 | 8.4 | 49.3 |
+| 仅关键词通道 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 3.5 | 5.3 |
+| 混合检索 | 0.833 | 0.889 | 1.000 | 0.889 | 0.916 | 7.7 | 710.6 |
 
-评测还暴露了一个真实问题：**不可回答的问题里，混合通道几乎总会返回候选片段（零命中率 0.000）**，
-拒答完全依赖提示词约束 —— 应该补一个相关性阈值或"检索为空即拒答"的短路分支。
-配好 `EMBEDDING_API_KEY` 后用 `EMBEDDING_MODE=real` 复跑同一套评测，即可得到真实模型下的检索质量。
-细节见 [`evals/README.md`](evals/README.md)。
+关键词通道对 6 条不可回答问题的零命中率是 1.000，可回答问题的引用格式覆盖率是 1.000。
+混合通道零命中率仍是 0.000：fake 模式会关掉 `RETRIEVAL_MIN_SIMILARITY`，拒答靠提示词。
+真实向量模式下，余弦相似度低于 0.35 的候选会在调用模型前丢掉，结果见 [`evals/report-real.md`](evals/report-real.md)。
+p95 被第一条查询的冷启动拉高。细节见 [`evals/README.md`](evals/README.md)。
 
 ## 📁 项目结构
 
