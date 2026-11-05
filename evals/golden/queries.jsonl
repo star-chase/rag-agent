@@ -21,4 +21,4 @@
 {"id": "q21", "question": "公司有通勤班车吗？", "terms": ["通勤班车", "路线"], "relevant": [], "answerable": false}
 {"id": "q22", "question": "公司提供托育服务吗？", "terms": ["托育", "幼儿园"], "relevant": [], "answerable": false}
 {"id": "q23", "question": "办公室可以带宠物吗？", "terms": ["宠物", "宠物友好"], "relevant": [], "answerable": false}
-{"id": "q24", "question": "有租房补贴吗？", "terms": ["租房补贴", "宿舍"], "relevant": [], "answerable": false}
+{"id": "q24", "question": "有住房津贴或宿舍吗？", "terms": ["住房津贴", "宿舍"], "relevant": [], "answerable": false}
