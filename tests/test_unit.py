@@ -44,7 +44,12 @@ def test_jwt_roundtrip():
 
 def test_rrf_ranks_each_channel_independently():
     """每一路从第 1 名计分。向量第 1 与关键词第 1 的权重相同，双冠军是 2/(k+1)。"""
-    jia, yi, bing = (_fake_chunk(1, "甲"), _fake_chunk(2, "乙"), _fake_chunk(3, "丙"))
+    # _rrf_fuse 的入参是检索返回的 Chunk，不是已经包过的 RetrievedChunk。
+    jia, yi, bing = (
+        _fake_chunk(1, "甲").chunk,
+        _fake_chunk(2, "乙").chunk,
+        _fake_chunk(3, "丙").chunk,
+    )
     k = 60
     fused = _rrf_fuse([jia, yi, bing], [bing, jia], top_k=3, k=k)
     scores = {item.chunk.id: item.score for item in fused}
