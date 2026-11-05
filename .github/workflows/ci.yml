@@ -37,11 +37,16 @@ jobs:
         run: |
           docker compose build postgres
           docker compose up -d postgres
+          # api/worker/init 声明了 env_file: .env，仓库不提交这个文件。
+          # docker compose exec/logs 会校验全部服务，文件不存在就直接失败，
+          # 所以健康检查改走容器名，不经过 compose。
           for _ in $(seq 1 40); do
-            docker compose exec -T postgres pg_isready -U rag -d rag_agent && exit 0
+            if docker exec rag-agent-postgres-1 pg_isready -U rag -d rag_agent; then
+              exit 0
+            fi
             sleep 3
           done
-          docker compose logs postgres
+          docker logs rag-agent-postgres-1 || true
           exit 1
 
       - name: Install dependencies
