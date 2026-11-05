@@ -12,5 +12,7 @@ venv/
 .ruff_cache/
 data/
 uploads/
+# 面试讲义只留在本机
+class/
 htmlcov/
 .coverage
