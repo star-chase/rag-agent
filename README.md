@@ -5,7 +5,7 @@
 
 面向「Agent 后端」方向校招的项目一：一个生产级 RAG（检索增强生成）问答后端。
 用户上传文档，系统完成 **解析 → 分块 → 向量化 → 混合检索 → 大模型生成（带引用）** 全流程，
-并覆盖传统后端的核心能力：认证鉴权、多租户隔离、异步任务、缓存、限流、可观测、容器化部署。
+并覆盖传统后端的核心能力：认证鉴权、按用户隔离知识库（越权 404）、异步任务、缓存、限流、可观测、容器化部署。
 
 > 核心代码自研（分块器、混合检索、RRF 融合、Agent 式引用回答），不依赖 LangChain/LlamaIndex，
 > 便于在面试中讲清每一步的原理。
@@ -16,14 +16,14 @@
 
 | 模块 | 能力 |
 |---|---|
-| 用户认证 | 注册 / 登录（JWT），bcrypt 密码哈希，OAuth2 兼容 Swagger Authorize |
-| 多租户知识库 | 每个用户独立知识库，资源归属校验（越权访问返回 404） |
+| 用户认证 | 注册 / 登录（JWT + bcrypt）；登录表单兼容 OAuth2 Password，供 Swagger Authorize |
+| 按用户隔离的知识库 | 每个用户独立知识库，资源归属校验（越权访问返回 404，不泄露存在性） |
 | 文档管理 | 上传（txt/md/pdf，≤10MB）→ 状态机（pending→processing→ready/failed）→ 删除 |
 | 文档摄入 | PDF 解析（pypdf）、段落感知分块（chunk_size/overlap 可配）、批量向量化 |
 | RAG 检索 | **向量检索 + 关键词检索 + RRF 融合初筛 + rerank 精排**（pgvector HNSW 索引；rerank 支持 RRF/LLM 两种模式） |
 | 智能问答 | 基于引用的回答（[1][2] 标注），引用溯源，无答案时拒答不编造 |
 | 流式输出 | SSE 流式问答（sources → delta* → done 事件流） |
-| 热点缓存 | 相同问题 1 小时缓存（Redis），命中直接返回 |
+| 热点缓存 | 相同问题 1 小时缓存（Redis，key 按知识库隔离），命中直接返回 |
 | 限流 | 滑动窗口限流（Redis 有序集合 + Lua，每用户最近 60 秒 N 次） |
 | 异步任务 | Celery（Redis broker）处理文档摄入，失败自动退避重试（幂等：重复处理会先清旧块） |
 | 健康检查 | /health 汇总 DB / Redis / 组件状态 |
@@ -36,7 +36,7 @@
 ┌─────────────┐   HTTP/SSE   ┌──────────────────────────────┐
 │  Web 前端     │ ──────────▶ │  FastAPI (api)                │
 └─────────────┘              │  ├─ /auth      认证/JWT        │
-                             │  ├─ /knowledge-bases  多租户 KB │
+                             │  ├─ /knowledge-bases  用户 KB   │
                              │  ├─ /documents    上传/状态    │
                              │  ├─ /conversations 问答/SSE   │
                              │  └─ /health       探活        │
@@ -248,7 +248,7 @@ Docker 方式下镜像里已包含 `app/static/`，直接访问 `http://localhos
 PYTHONPATH=.deps python3 -m pytest -v
 ```
 
-覆盖：分块器、密码/JWT、注册登录、知识库多租户隔离、文档摄入、缓存命中、SSE 流式。
+覆盖：分块器、密码/JWT、注册登录、知识库归属隔离、文档摄入、缓存命中、SSE 流式。
 
 ## 🔌 MCP Server（把检索能力暴露成标准工具）
 
@@ -314,7 +314,7 @@ docker compose up -d postgres
 TEST_DB_PORT=5432 TEST_DB_PASSWORD=rag PYTHONPATH=.deps python3 -m evals.run_evals --check --report evals/report.md
 ```
 
-下面是 2026-11-05 CI 的离线结果（fake embedding，关键词用 pg_jieba）。向量没有语义，数字只反映管道行为：
+CI 默认 `EMBEDDING_MODE=fake`：向量没有语义，用查询自带的 `terms` 检索，指标只反映**管道行为**，用于回归卡口（关键词通道阈值：`recall@5 ≥ 0.95`、`recall@1 ≥ 0.85`、`MRR@5 ≥ 0.9`、不可回答零命中率 `≥ 0.9`）。下面是 2026-11-05 CI 的离线结果（pg_jieba + fake embedding）：
 
 | 通道 | Recall@1 | Recall@3 | Recall@5 | MRR@5 | nDCG@5 | p50 (ms) | p95 (ms) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -322,9 +322,16 @@ TEST_DB_PORT=5432 TEST_DB_PASSWORD=rag PYTHONPATH=.deps python3 -m evals.run_eva
 | 混合检索 | 0.833 | 0.889 | 1.000 | 0.889 | 0.916 | 7.7 | 710.6 |
 
 关键词通道对 6 条不可回答问题的零命中率是 1.000，可回答问题的引用格式覆盖率是 1.000。
-混合通道零命中率仍是 0.000：fake 模式会关掉 `RETRIEVAL_MIN_SIMILARITY`，拒答靠提示词。
-真实向量模式下，余弦相似度低于 0.35 的候选会在调用模型前丢掉，结果见 [`evals/report-real.md`](evals/report-real.md)。
-p95 被第一条查询的冷启动拉高。细节见 [`evals/README.md`](evals/README.md)。
+混合通道零命中率是 0.000：fake 模式会关掉 `RETRIEVAL_MIN_SIMILARITY`，拒答靠提示词。p95 被第一条查询的冷启动拉高。
+
+真实语义质量要看 `EMBEDDING_MODE=real` 的复跑。2026-11-04 用豆包 embedding（1024 维）跑同一套 12 篇 / 24 条，报告见 [`evals/report-real.md`](evals/report-real.md)：
+
+| 通道 | Recall@1 | Recall@3 | Recall@5 | MRR@5 | nDCG@5 | p50 (ms) | p95 (ms) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 仅关键词通道 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 7.1 | 8.5 |
+| 混合检索 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 2749.2 | 6389.0 |
+
+混合通道对不可回答问题的零命中率是 0.667：余弦相似度低于 `RETRIEVAL_MIN_SIMILARITY`（默认 0.35）的候选会在调用模型前丢掉。细节见 [`evals/README.md`](evals/README.md)。
 
 ## 📁 项目结构
 
